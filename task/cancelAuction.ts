@@ -11,7 +11,7 @@ task("cancelAuction", "Finish the auction")
         const rc = await cancelTransaction.wait();
         const canceledEvent = rc!.events!.find(e => e.event == "AuctionCanceled");
         const [
-            [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive], 
+            [auctionItemId, topBidder, topBidderSum, bidsNum, deadline], 
             [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
           ]  = canceledEvent!.args!;
 

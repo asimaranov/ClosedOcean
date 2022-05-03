@@ -16,11 +16,12 @@ describe("marketplace test", function () {
   const testBid3 = ethers.utils.parseEther("0.05");
 
   const auctionTime = 60 * 60 * 24 * 3;
+  const testErc1155Amount = 123;
 
   enum ProtocolType {
     ERC721 = 0,
     ERC1155 = 1
-}
+  }
 
   this.beforeEach(async () => {
     const NiceErc721 = await ethers.getContractFactory("NiceErc721");
@@ -38,47 +39,67 @@ describe("marketplace test", function () {
   })
 
   it("Test marketplace ERC721 item creation", async () => {
-    const createTransaction = await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    const createTransaction = await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     const rc = await createTransaction.wait();
     const itemCreatedEvent = rc.events.find((e: {event: string}) => e.event == "ItemCreated");
-    const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = itemCreatedEvent!.args;
+    const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = itemCreatedEvent!.args;
     expect(itemId).to.equal(item1Id);
     expect(price).to.equal(testPrice);
-    expect(name).to.equal(testName);
+    expect(amount).to.equal(1);
     expect(itemOwner).to.equal(owner.address);
     expect(itemProtocolType).to.equal(ProtocolType.ERC721);
     expect(isAvailable).to.equal(false);
+    expect(name).to.equal(testName);
+
   });
 
   it("Test marketplace ERC1155 item creation", async () => {
-    const createTransaction = await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC1155);
+    const createTransaction = await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC1155, testErc1155Amount);
     const rc = await createTransaction.wait();
     const itemCreatedEvent = rc.events.find((e: {event: string}) => e.event == "ItemCreated");
-    const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = itemCreatedEvent!.args;
+    const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = itemCreatedEvent!.args;
     expect(itemId).to.equal(item1Id);
     expect(price).to.equal(testPrice);
-    expect(name).to.equal(testName);
+    expect(amount).to.equal(testErc1155Amount);
     expect(itemOwner).to.equal(owner.address);
     expect(itemProtocolType).to.equal(ProtocolType.ERC1155);
     expect(isAvailable).to.equal(false);
+    expect(name).to.equal(testName);
+
+  });
+
+  it("Check that it's impossible to create ERC721 in amount not equal to 1", async () => {
+    await expect(
+      marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, testErc1155Amount)
+    ).to.be.revertedWith("Erc721 doesn't support amount");
+  });
+
+  it("Check that it's impossible to create token with non-positive amount", async () => {
+    await expect(
+      marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC1155, 0)
+    ).to.be.revertedWith("Amount must be positive");
+
+    await expect(
+      marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 0)
+    ).to.be.revertedWith("Amount must be positive");
   });
 
   it("Test item listing", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     const listTransaction = await marketplaceContract.listItem(item1Id);
     const rc = await listTransaction.wait();
     const listedEvent = rc.events.find((e: {event: string}) => e.event == "ItemListed");
-    const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = listedEvent!.args;
+    const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = listedEvent!.args;
     expect(isAvailable).to.equal(true);
   });
 
   it("Check that only owner can list a thing", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await expect(marketplaceContract.connect(user1).listItem(item1Id)).to.be.revertedWith("You're not the owner");
   });
 
   it("Test item buying", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItem(item1Id);
 
     const initialOwnerBalance = await owner.getBalance();
@@ -99,14 +120,14 @@ describe("marketplace test", function () {
   });
 
   it("Check that user cant buy something by a lower price", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItem(item1Id);
 
     await expect(marketplaceContract.connect(user1).buyItem(item1Id, {value: testPrice.sub(1)})).to.be.revertedWith("Invalid payment sum");
   });
 
   it("Check that user can buy something by a bigger price", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItem(item1Id);
 
     const user1BalanceBeforeBuy = await user1.getBalance();
@@ -125,61 +146,60 @@ describe("marketplace test", function () {
   });
 
   it("Check that user cant by an unlisted item", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.cancel(item1Id);
 
     await expect(marketplaceContract.connect(user1).buyItem(item1Id, {value: testPrice.sub(1)})).to.be.revertedWith("Item is not available"); 
   });
 
   it("Test item unlisting", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItem(item1Id);
     const unlistTransaction = await marketplaceContract.cancel(item1Id);
 
     const rc = await unlistTransaction.wait();
     const unlistedEvent = rc.events.find((e: {event: string}) => e.event == "ItemUnlisted");
-    const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = unlistedEvent!.args;
+    const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = unlistedEvent!.args;
     expect(isAvailable).to.equal(false);
   });
   
   it("Check that only owner can unlist a thing", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await expect(marketplaceContract.connect(user1).cancel(item1Id)).to.be.revertedWith("You're not the owner");
   });
 
   it("Test item auction listing", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     const listingTransaction = await marketplaceContract.listItemOnAuction(item1Id);
     const rc = await listingTransaction.wait();
     const listingEvent = rc.events.find((e: {event: string}) => e.event == "AuctionCreated");
     const [
-      [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive], 
-      [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
+      [topBidderSum, bidsNum, deadline, topBidder], 
+      [itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]
     ] = listingEvent.args;
 
-    expect(auctionItemId).to.equal(item1Id);
+    expect(itemId).to.equal(item1Id);
     expect(topBidder).to.equal("0x0000000000000000000000000000000000000000");
     expect(topBidderSum).to.equal(0);
     expect(bidsNum).to.equal(0);
     expect(deadline.toNumber()).to.be.greaterThan(Date.now() / 1000);
-    expect(isActive).to.be.true;
     expect(isInAuction).to.be.true;
     expect(isAvailable).to.be.false;
   });
 
   it("Check that it's impossible to double list item", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
     await expect(marketplaceContract.listItemOnAuction(item1Id)).to.be.revertedWith("Item already placed");
   });
 
   it("Check that it's impossible to double list someone else's item", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await expect(marketplaceContract.connect(user1).listItemOnAuction(item1Id)).to.be.revertedWith("You're not the owner");
   });
 
   it("Test bid creation", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     const initialUser1Balance = await user1.getBalance();
@@ -187,7 +207,8 @@ describe("marketplace test", function () {
     const bidTransaction = await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
     const rc = await bidTransaction.wait();
     const bidEvent = rc.events.find((e: {event: string}) => e.event == "BidMade");
-    const [[auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive]] = bidEvent.args;
+
+    const [[topBidderSum, bidsNum, deadline, topBidder]] = bidEvent.args;
     expect(topBidder).to.equal(user1.address);
     expect(topBidderSum).to.equal(testBid1);
     expect(bidsNum).to.equal(bidsNum);
@@ -198,7 +219,7 @@ describe("marketplace test", function () {
   });
 
   it("Test second bid creation", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     const initialUser1Balance = await user1.getBalance();
@@ -209,7 +230,7 @@ describe("marketplace test", function () {
 
     const rc = await bidTransaction.wait();
     const bidEvent = rc.events.find((e: {event: string}) => e.event == "BidMade");
-    const [[auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive]] = bidEvent.args;
+    const [[topBidderSum, bidsNum, deadline, topBidder]] = bidEvent.args;
 
     expect(topBidder).to.equal(user2.address);
     expect(topBidderSum).to.equal(testBid2);
@@ -219,7 +240,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to bid sum that less or equal the top sum", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
     
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -228,14 +249,14 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to list a thing that's placed in auction", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await expect(marketplaceContract.listItem(item1Id)).to.be.revertedWith("Item is placed in auction");
   });
 
   it("Check that it's impossible to finish auction before deadline", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -245,7 +266,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to finish auction if too few bids", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -255,7 +276,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that only owner can finish auction", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -267,7 +288,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to bid after finish", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -281,7 +302,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to double finish", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -296,7 +317,7 @@ describe("marketplace test", function () {
 
 
   it("Test auction finishing", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     const initialOwnerBalance = await owner.getBalance();
@@ -310,11 +331,10 @@ describe("marketplace test", function () {
     const finishEvent = rc.events.find((e: {event: string}) => e.event == "AuctionFinished");
 
     const [
-      [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive],
-      [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
+      [topBidderSum, bidsNum, deadline, topBidder], 
+      [itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]
     ] = finishEvent.args;
 
-    expect(isActive).to.be.false;
     expect(itemOwner).to.equal(user2.address);
     expect(isInAuction).to.be.false;
 
@@ -323,13 +343,13 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to cancel auction before deadline", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
     await expect(marketplaceContract.cancelAuction(item1Id)).to.be.revertedWith("Auction is still active");
   });
 
   it("Check that only owner can cancel auction", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await network.provider.send("evm_increaseTime", [auctionTime]); // Add 3 days
@@ -338,7 +358,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's imposible to cancel auction if it already took place", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -350,7 +370,7 @@ describe("marketplace test", function () {
   });
 
   it("Check that it's impossible to double cancel", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await network.provider.send("evm_increaseTime", [auctionTime]); // Add 3 days
@@ -361,7 +381,7 @@ describe("marketplace test", function () {
   });
 
   it("Test auction canceling if no bidders", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await network.provider.send("evm_increaseTime", [auctionTime]); // Add 3 days
@@ -371,17 +391,16 @@ describe("marketplace test", function () {
     const finishEvent = rc.events.find((e: {event: string}) => e.event == "AuctionCanceled");
 
     const [
-      [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive],
-      [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
+      [topBidderSum, bidsNum, deadline, topBidder], 
+      [itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]
     ] = finishEvent.args;
 
-    expect(isActive).to.be.false;
     expect(isInAuction).to.be.false;
     expect(itemOwner).to.equal(owner.address);
   });
 
   it("Test auction canceling if one bidder", async () => {
-    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721);
+    await marketplaceContract.createItem(testMetadataUri, testPrice, testName, ProtocolType.ERC721, 1);
     await marketplaceContract.listItemOnAuction(item1Id);
 
     await marketplaceContract.connect(user1).makeBid(item1Id, {value: testBid1});
@@ -395,15 +414,13 @@ describe("marketplace test", function () {
     const finishEvent = rc.events.find((e: {event: string}) => e.event == "AuctionCanceled");
 
     const [
-      [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive],
-      [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
+      [topBidderSum, bidsNum, deadline, topBidder], 
+      [itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]
     ] = finishEvent.args;
 
-    expect(isActive).to.be.false;
     expect(isInAuction).to.be.false;
     expect(itemOwner).to.equal(owner.address);
     
     expect((await user1.getBalance()).eq(user1BalanceAfterBid.add(testBid1))).to.be.true;
-
   });
 });

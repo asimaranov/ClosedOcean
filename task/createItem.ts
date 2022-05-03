@@ -1,4 +1,4 @@
-import { task } from "hardhat/config";
+import { task, types } from "hardhat/config";
 
 enum ProtocolType {
     ERC721 = 0,
@@ -11,6 +11,7 @@ task("createItem", "Creates new marketplace item")
     .addParam("price", "Price of item, eth", "0.001")
     .addParam("name", "Name of item", "Test item 1")
     .addParam("protocolType", "Type of nft protocol to be used. ERC721/ERC1155", "ERC721")
+    .addParam("amount", "Amount of item", 1, types.int)
 
     .setAction(async (taskArgs, hre) => {
 
@@ -23,15 +24,16 @@ task("createItem", "Creates new marketplace item")
             taskArgs['itemMetadataUri'], 
             ethPrice, 
             taskArgs['name'], 
-            protocol
+            protocol,
+            taskArgs['amount']
         );
         
         const rc = await createTransaction.wait();
         const itemCreatedEvent = rc!.events!.find(e => e.event == "ItemCreated");
-        const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = itemCreatedEvent!.args!;
+        const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = itemCreatedEvent!.args!;
 
         console.log(
-            `Created new nft item. Item id: ${itemId}, item price: ${price}, item name: "${name}", ` +
+            `Created new nft item. Item id: ${itemId}, amount: ${amount}, item price: ${price}, item name: "${name}", ` +
             `item owner: ${itemOwner}, item protocol type: ${ProtocolType[itemProtocolType]}, is available for buying: ${isAvailable}, is in auction: ${isInAuction}`
         );
     });

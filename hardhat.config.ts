@@ -9,7 +9,11 @@ import "solidity-coverage";
 import "./task/createItem"
 import "./task/listItem"
 import "./task/listItemOnAuction"
+import "./task/buyItem"
+import "./task/cancel"
+import "./task/cancelAuction"
 import "./task/makeBid"
+import "./task/finishAuction"
 
 dotenv.config();
 

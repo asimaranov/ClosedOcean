@@ -12,7 +12,7 @@ task("makeBid", "Make a bid")
         const rc = await bidTransaction.wait();
         const listedEvent = rc!.events!.find(e => e.event == "BidMade");
         const [
-            [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive], 
+            [topBidderSum, bidsNum, deadline, topBidder], 
           ]  = listedEvent!.args!;
 
         console.log(`Successfully bidded`)

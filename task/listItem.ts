@@ -10,7 +10,7 @@ task("listItem", "Lists item on the marketplace")
         const listTransaction = await marketplaceContract.listItem(taskArgs['itemId']);
         const rc = await listTransaction.wait();
         const listedEvent = rc!.events!.find(e => e.event == "ItemListed");
-        const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]] = listedEvent!.args!;
+        const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]] = listedEvent!.args!;
 
         console.log(`Successfully listed. Is available for buying: ${isAvailable}`)
     });

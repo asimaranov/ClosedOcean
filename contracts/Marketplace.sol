@@ -11,23 +11,22 @@ contract Marketplace is ERC1155Holder {
     }
 
     struct AuctionItem {
-        uint256 itemId;
-        address payable topBidder;
         uint256 topBidderSum;
         uint256 bidsNum;
         uint256 deadline;
-        bool isActive;
+        address payable topBidder;
     }
 
-    struct MarketplaceItem{
+    struct MarketplaceItem {
         uint256 itemId;
         uint256 tokenId;
         uint256 price;
-        string name;
+        uint256 amount;
         address payable owner;
         ProtocolType protocolType;
         bool isAvailable;
         bool isInAuction;
+        string name;
     }
 
     event ItemCreated(MarketplaceItem item);
@@ -54,17 +53,20 @@ contract Marketplace is ERC1155Holder {
         niceErc1155 = NiceErc1155(niceErc1155Addr);
     }
 
-    function createItem(string memory itemMetadataUri, uint256 price, string memory name, ProtocolType protocolType) public returns (uint256 itemId) {
+    function createItem(string memory itemMetadataUri, uint256 price, string memory name, ProtocolType protocolType, uint256 amount) public returns (uint256 itemId) {
+        require(amount >= 1, "Amount must be positive");
+
         itemId = itemCount;
         uint256 tokenId;
 
         if (protocolType == ProtocolType.ERC721) {
+            require(amount == 1, "Erc721 doesn't support amount");
             tokenId = niceErc721.mint(itemMetadataUri);
         } else {
-            tokenId = niceErc1155.mint(1, itemMetadataUri);
+            tokenId = niceErc1155.mint(amount, itemMetadataUri);
         }
 
-        marketplaceItems[itemId] = MarketplaceItem(itemId, tokenId, price, name, payable(msg.sender), protocolType, false, false);
+        marketplaceItems[itemId] = MarketplaceItem(itemId, tokenId, price, amount, payable(msg.sender), protocolType, false, false, name);
         itemCount++;
         emit ItemCreated(marketplaceItems[itemId]);
     }
@@ -106,12 +108,12 @@ contract Marketplace is ERC1155Holder {
         marketplaceItems[itemId].isInAuction = true;
         marketplaceItems[itemId].isAvailable = false;
 
-        auctions[itemId] = AuctionItem(itemId, payable(0), 0, 0, block.timestamp + 3 days, true);
+        auctions[itemId] = AuctionItem(0, 0, block.timestamp + 3 days, payable(0));
         emit AuctionCreated(auctions[itemId], marketplaceItems[itemId]);
     }
 
     function makeBid(uint256 itemId) public payable {
-        require(auctions[itemId].isActive, "Auction finished");
+        require(marketplaceItems[itemId].isInAuction, "Auction finished");
         require(msg.value > auctions[itemId].topBidderSum, "Bid is too low");
         
         address payable prevBidder = auctions[itemId].topBidder;
@@ -121,21 +123,20 @@ contract Marketplace is ERC1155Holder {
         auctions[itemId].topBidderSum = msg.value;
         auctions[itemId].bidsNum++;
 
-        if(auctions[itemId].bidsNum > 1) 
+        if(prevBidder != address(0)) 
             prevBidder.transfer(prevBidderSum);
         
         emit BidMade(auctions[itemId]);
     }
 
     function finishAuction(uint256 itemId) public {
-        require(auctions[itemId].isActive, "Auction finished");
+        require(marketplaceItems[itemId].isInAuction, "Auction finished");
         require(marketplaceItems[itemId].owner == msg.sender, "You're not the owner");
         require(block.timestamp >= auctions[itemId].deadline, "Auction is still active");
         require(auctions[itemId].bidsNum >= 2, "Too few bidders");
 
         address payable prevOwner = marketplaceItems[itemId].owner;
 
-        auctions[itemId].isActive = false;
         marketplaceItems[itemId].isInAuction = false;
         marketplaceItems[itemId].owner = auctions[itemId].topBidder;
 
@@ -144,12 +145,11 @@ contract Marketplace is ERC1155Holder {
     }
 
     function cancelAuction(uint256 itemId) public {
-        require(auctions[itemId].isActive, "Auction finished");
+        require(marketplaceItems[itemId].isInAuction, "Auction finished");
         require(marketplaceItems[itemId].owner == msg.sender, "You're not the owner");
         require(block.timestamp >= auctions[itemId].deadline, "Auction is still active");
         require(auctions[itemId].bidsNum < 2, "Auction has already taken place");
 
-        auctions[itemId].isActive = false;
         marketplaceItems[itemId].isInAuction = false;
 
         if (auctions[itemId].bidsNum > 0) 

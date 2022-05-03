@@ -11,8 +11,8 @@ task("listItemOnAuction", "Lists item on the auction")
         const rc = await listTransaction.wait();
         const listedEvent = rc!.events!.find(e => e.event == "AuctionCreated");
         const [
-            [auctionItemId, topBidder, topBidderSum, bidsNum, deadline, isActive], 
-            [itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction]
+            [topBidderSum, bidsNum, deadline, topBidder], 
+            [itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name]
           ]  = listedEvent!.args!;
 
         console.log(`Successfully listed. Is in auction: ${isInAuction}`)

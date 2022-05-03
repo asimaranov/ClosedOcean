@@ -11,9 +11,9 @@ task("buyItem", "Buy marketplace item")
         const buyTransaction = await marketplaceContract.buyItem(taskArgs['itemId'], {value: hre.ethers.utils.parseEther(taskArgs['price'])});
         const rc = await buyTransaction.wait();
     
-        const boughtEvent = rc.events.find(e => e.event == 'ItemBought');
+        const boughtEvent = rc!.events!.find(e => e.event == 'ItemBought');
         
-        const [[itemId, tokenId, price, name, itemOwner, itemProtocolType, isAvailable, isInAuction], prevOwner] = boughtEvent.args;
+        const [[itemId, tokenId, price, amount, itemOwner, itemProtocolType, isAvailable, isInAuction, name], prevOwner] = boughtEvent!.args!;
     
         console.log(
             `Item successfully bought. Item id: ${itemId}, item price: ${price}, item name: "${name}", ` +
